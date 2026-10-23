@@ -3,6 +3,12 @@
 찍기 → 번역 → 자동 저장 → 여행 목록까지만 되는 시제품이에요.
 글자 인식과 번역은 모두 폰 안에서 해요 (Google ML Kit). 서버, API 키, 결제는 아직 없어요.
 
+## 웹 미리보기
+
+https://itssophie.dev/camtrip/ — 브라우저에서는 카메라·ML Kit를 쓸 수 없어서, 웹(`kIsWeb`)에서는
+샘플 사진(`assets/demo`, `lib/demo.dart`)으로 화면과 흐름만 보여줘요. 웹 기록은 저장되지 않아요.
+빌드: `flutter build web --release --base-href /camtrip/` (Git Bash에서는 앞에 `MSYS_NO_PATHCONV=1`).
+
 ## 되는 것
 
 - 카메라로 찍거나 갤러리에서 골라 번역 (일본어, 중국어, 한국어, 영어·유럽어 글자)

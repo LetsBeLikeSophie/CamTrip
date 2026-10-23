@@ -1,10 +1,10 @@
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import '../main.dart' show ink, muted;
 import '../models.dart';
+import '../photo.dart';
 import '../store.dart';
 
 /// S03 번역 결과. Overlays the translation on the photo. Saved automatically.
@@ -31,7 +31,7 @@ class _ResultScreenState extends State<ResultScreen> {
 
   Future<void> _loadSize() async {
     try {
-      final bytes = await File(widget.capture.imagePath).readAsBytes();
+      final bytes = await capturePhotoBytes(widget.capture.imagePath);
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       final size = Size(frame.image.width.toDouble(), frame.image.height.toDouble());
@@ -181,7 +181,7 @@ class _ResultScreenState extends State<ResultScreen> {
             height: size.height,
             child: Stack(
               children: [
-                Positioned.fill(child: Image.file(File(c.imagePath), fit: BoxFit.fill)),
+                Positioned.fill(child: capturePhoto(c.imagePath, fit: BoxFit.fill)),
                 if (_showTranslated)
                   for (final b in c.blocks)
                     Positioned(

@@ -1,9 +1,9 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../main.dart' show ink, muted;
 import '../models.dart';
+import '../photo.dart';
 import '../store.dart';
 import 'result_screen.dart';
 
@@ -205,7 +205,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                Image.file(File(c.imagePath), fit: BoxFit.cover, cacheWidth: 400),
+                                capturePhoto(c.imagePath, fit: BoxFit.cover, cacheWidth: 400),
                                 Positioned(
                                   left: 0,
                                   right: 0,

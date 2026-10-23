@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../main.dart' show ink, muted;
+import '../demo.dart';
 import '../models.dart';
 import '../store.dart';
 import '../translator_service.dart';
@@ -37,24 +39,48 @@ class _CameraHomeState extends State<CameraHome> {
     return code.isEmpty ? 'ko' : code;
   }
 
-  Future<void> _start(ImageSource source) async {
-    final XFile? file = await _picker.pickImage(
-      source: source,
-      imageQuality: 90,
-      maxWidth: 2400,
-    );
-    if (file == null || !mounted) return;
+  int _demoIndex = 0;
 
-    setState(() => _step = '글자 읽는 중');
+  /// Web preview: no camera or ML Kit in the browser, so walk through the
+  /// same flow with a sample photo. The Chinese sample comes first to show
+  /// the "new trip" question.
+  Future<(String, TranslationOutput)> _demoRun() async {
+    final order = [
+      ...demoSamples.where((s) => s.lang != 'ja'),
+      ...demoSamples.where((s) => s.lang == 'ja'),
+    ];
+    final s = order[_demoIndex++ % order.length];
+    for (final step in ['글자 읽는 중', '번역 중']) {
+      if (mounted) setState(() => _step = step);
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+    }
+    return (s.asset, TranslationOutput(s.lang, s.blocks));
+  }
+
+  Future<void> _start(ImageSource source) async {
     try {
-      final out = await _service.run(
-        imagePath: file.path,
-        scriptKey: widget.store.scriptKey,
-        targetLang: _targetLang,
-        onStep: (s) {
-          if (mounted) setState(() => _step = s);
-        },
-      );
+      final String imagePath;
+      final TranslationOutput out;
+      if (kIsWeb) {
+        (imagePath, out) = await _demoRun();
+      } else {
+        final XFile? file = await _picker.pickImage(
+          source: source,
+          imageQuality: 90,
+          maxWidth: 2400,
+        );
+        if (file == null || !mounted) return;
+        imagePath = file.path;
+        setState(() => _step = '글자 읽는 중');
+        out = await _service.run(
+          imagePath: file.path,
+          scriptKey: widget.store.scriptKey,
+          targetLang: _targetLang,
+          onStep: (s) {
+            if (mounted) setState(() => _step = s);
+          },
+        );
+      }
       if (!mounted) return;
 
       final now = DateTime.now();
@@ -83,7 +109,7 @@ class _CameraHomeState extends State<CameraHome> {
 
       final capture = await widget.store.addCapture(
         trip: trip,
-        originalImagePath: file.path,
+        originalImagePath: imagePath,
         sourceLang: out.sourceLang,
         blocks: out.blocks,
         now: now,
@@ -212,7 +238,9 @@ class _CameraHomeState extends State<CameraHome> {
                   const SizedBox(height: 12),
                   const Center(
                     child: Text(
-                      '시제품: 글자 인식과 번역은 모두 이 폰 안에서 해요',
+                      kIsWeb
+                          ? '웹 미리보기: 샘플 사진으로 흐름만 보여줘요'
+                          : '시제품: 글자 인식과 번역은 모두 이 폰 안에서 해요',
                       style: TextStyle(fontSize: 12, color: muted),
                     ),
                   ),

@@ -4,10 +4,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'demo.dart';
 import 'models.dart';
+import 'photo.dart';
 
 /// Everything is stored on the device only, in one JSON file plus the
-/// copied photos. Nothing here is sent anywhere.
+/// copied photos. Nothing here is sent anywhere. The web preview keeps
+/// sample data in memory only.
 class AppStore extends ChangeNotifier {
   final List<Trip> trips = [];
   final List<Capture> captures = [];
@@ -24,6 +27,11 @@ class AppStore extends ChangeNotifier {
   Directory get photoDir => Directory('${_dir.path}/photos');
 
   Future<void> load() async {
+    if (kIsWeb) {
+      _loadDemo();
+      notifyListeners();
+      return;
+    }
     _dir = await getApplicationDocumentsDirectory();
     if (!await photoDir.exists()) {
       await photoDir.create(recursive: true);
@@ -54,7 +62,36 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _loadDemo() {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(days: 2));
+    final trip = Trip(
+      id: 'demo-trip',
+      country: '일본',
+      city: '도쿄',
+      langs: ['ja'],
+      startAt: start,
+      lastAt: now.subtract(const Duration(hours: 20)),
+    );
+    trips.add(trip);
+    final japanese = demoSamples.where((s) => s.lang == 'ja').toList();
+    for (var i = 0; i < japanese.length; i++) {
+      final s = japanese[i];
+      final text = s.blocks.map((b) => '${b.source} ${b.translated}').join(' ');
+      captures.add(Capture(
+        id: 'demo-$i',
+        tripId: trip.id,
+        imagePath: s.asset,
+        sourceLang: s.lang,
+        at: start.add(Duration(hours: 6 * i)),
+        category: guessCategory(text),
+        blocks: s.blocks,
+      ));
+    }
+  }
+
   Future<void> _save() async {
+    if (kIsWeb) return;
     final data = {
       'trips': trips.map((t) => t.toJson()).toList(),
       'captures': captures.map((c) => c.toJson()).toList(),
@@ -120,14 +157,14 @@ class AppStore extends ChangeNotifier {
     required DateTime now,
   }) async {
     final id = 'c${now.microsecondsSinceEpoch}';
-    final fileName = originalImagePath.split(Platform.pathSeparator).last;
-    final ext = fileName.contains('.') ? fileName.substring(fileName.lastIndexOf('.')) : '.jpg';
-    final saved = await File(originalImagePath).copy('${photoDir.path}/$id$ext');
+    final savedPath = isAssetPhoto(originalImagePath)
+        ? originalImagePath
+        : await _copyPhoto(originalImagePath, id);
     final text = blocks.map((b) => '${b.source} ${b.translated}').join(' ');
     final capture = Capture(
       id: id,
       tripId: trip.id,
-      imagePath: saved.path,
+      imagePath: savedPath,
       sourceLang: sourceLang,
       at: now,
       category: guessCategory(text),
@@ -140,6 +177,13 @@ class AppStore extends ChangeNotifier {
     return capture;
   }
 
+  Future<String> _copyPhoto(String originalImagePath, String id) async {
+    final fileName = originalImagePath.split(Platform.pathSeparator).last;
+    final ext = fileName.contains('.') ? fileName.substring(fileName.lastIndexOf('.')) : '.jpg';
+    final saved = await File(originalImagePath).copy('${photoDir.path}/$id$ext');
+    return saved.path;
+  }
+
   Future<void> setCategory(Capture c, String category) async {
     c.category = category;
     await _save();
@@ -148,8 +192,7 @@ class AppStore extends ChangeNotifier {
 
   Future<void> deleteCapture(Capture c) async {
     captures.removeWhere((x) => x.id == c.id);
-    final f = File(c.imagePath);
-    if (await f.exists()) await f.delete();
+    await deletePhoto(c.imagePath);
     // A trip with no translations left is removed with its last capture.
     trips.removeWhere((t) => !captures.any((x) => x.tripId == t.id));
     await _save();
@@ -166,8 +209,7 @@ class AppStore extends ChangeNotifier {
   Future<void> deleteTrip(Trip t) async {
     final gone = captures.where((c) => c.tripId == t.id).toList();
     for (final c in gone) {
-      final f = File(c.imagePath);
-      if (await f.exists()) await f.delete();
+      await deletePhoto(c.imagePath);
     }
     captures.removeWhere((c) => c.tripId == t.id);
     trips.removeWhere((x) => x.id == t.id);
