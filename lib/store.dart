@@ -1,0 +1,195 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'models.dart';
+
+/// Everything is stored on the device only, in one JSON file plus the
+/// copied photos. Nothing here is sent anywhere.
+class AppStore extends ChangeNotifier {
+  final List<Trip> trips = [];
+  final List<Capture> captures = [];
+  String scriptKey = 'japanese';
+
+  /// Language to translate into. null follows the phone language.
+  String? targetLang;
+  late Directory _dir;
+
+  /// True when the saved data could not be read at start-up.
+  bool loadFailed = false;
+
+  File get _file => File('${_dir.path}/camtrip.json');
+  Directory get photoDir => Directory('${_dir.path}/photos');
+
+  Future<void> load() async {
+    _dir = await getApplicationDocumentsDirectory();
+    if (!await photoDir.exists()) {
+      await photoDir.create(recursive: true);
+    }
+    if (await _file.exists()) {
+      try {
+        final data = jsonDecode(await _file.readAsString()) as Map<String, dynamic>;
+        trips
+          ..clear()
+          ..addAll((data['trips'] as List)
+              .map((e) => Trip.fromJson(e as Map<String, dynamic>)));
+        captures
+          ..clear()
+          ..addAll((data['captures'] as List)
+              .map((e) => Capture.fromJson(e as Map<String, dynamic>)));
+        scriptKey = (data['scriptKey'] as String?) ?? 'japanese';
+        targetLang = data['targetLang'] as String?;
+      } catch (e) {
+        // Keep the broken file so the next save does not wipe the old data.
+        debugPrint('CamTrip: could not read saved data: $e');
+        trips.clear();
+        captures.clear();
+        final stamp = DateTime.now().millisecondsSinceEpoch;
+        await _file.rename('${_dir.path}/camtrip.broken-$stamp.json');
+        loadFailed = true;
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> _save() async {
+    final data = {
+      'trips': trips.map((t) => t.toJson()).toList(),
+      'captures': captures.map((c) => c.toJson()).toList(),
+      'scriptKey': scriptKey,
+      'targetLang': targetLang,
+    };
+    // Write to a temp file first so a crash mid-write cannot corrupt the data.
+    final tmp = File('${_file.path}.tmp');
+    await tmp.writeAsString(jsonEncode(data), flush: true);
+    await tmp.rename(_file.path);
+  }
+
+  Trip? get currentTrip {
+    if (trips.isEmpty) return null;
+    final sorted = [...trips]..sort((a, b) => b.lastAt.compareTo(a.lastAt));
+    return sorted.first;
+  }
+
+  /// Spec S06: ask about a new trip when the language is new for the
+  /// current trip, or when the last capture was more than 3 days ago.
+  bool needsNewTrip(String lang, DateTime now) {
+    final t = currentTrip;
+    if (t == null) return true;
+    if (now.difference(t.lastAt).inDays > 3) return true;
+    if (lang != 'und' && !t.langs.contains('und') && !t.langs.contains(lang)) return true;
+    return false;
+  }
+
+  /// The user kept the current trip for a new language: remember it so we
+  /// do not ask again for the same language.
+  Future<void> addLang(Trip t, String lang) async {
+    if (t.langs.contains(lang)) return;
+    t.langs.add(lang);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<Trip> createTrip({
+    required String country,
+    required String city,
+    required String lang,
+    required DateTime now,
+  }) async {
+    final trip = Trip(
+      id: 't${now.microsecondsSinceEpoch}',
+      country: country,
+      city: city,
+      langs: [lang],
+      startAt: now,
+      lastAt: now,
+    );
+    trips.add(trip);
+    await _save();
+    notifyListeners();
+    return trip;
+  }
+
+  Future<Capture> addCapture({
+    required Trip trip,
+    required String originalImagePath,
+    required String sourceLang,
+    required List<TextBlockResult> blocks,
+    required DateTime now,
+  }) async {
+    final id = 'c${now.microsecondsSinceEpoch}';
+    final fileName = originalImagePath.split(Platform.pathSeparator).last;
+    final ext = fileName.contains('.') ? fileName.substring(fileName.lastIndexOf('.')) : '.jpg';
+    final saved = await File(originalImagePath).copy('${photoDir.path}/$id$ext');
+    final text = blocks.map((b) => '${b.source} ${b.translated}').join(' ');
+    final capture = Capture(
+      id: id,
+      tripId: trip.id,
+      imagePath: saved.path,
+      sourceLang: sourceLang,
+      at: now,
+      category: guessCategory(text),
+      blocks: blocks,
+    );
+    captures.add(capture);
+    trip.lastAt = now;
+    await _save();
+    notifyListeners();
+    return capture;
+  }
+
+  Future<void> setCategory(Capture c, String category) async {
+    c.category = category;
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> deleteCapture(Capture c) async {
+    captures.removeWhere((x) => x.id == c.id);
+    final f = File(c.imagePath);
+    if (await f.exists()) await f.delete();
+    // A trip with no translations left is removed with its last capture.
+    trips.removeWhere((t) => !captures.any((x) => x.tripId == t.id));
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> updateTrip(Trip t, {required String country, required String city}) async {
+    t.country = country;
+    t.city = city;
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> deleteTrip(Trip t) async {
+    final gone = captures.where((c) => c.tripId == t.id).toList();
+    for (final c in gone) {
+      final f = File(c.imagePath);
+      if (await f.exists()) await f.delete();
+    }
+    captures.removeWhere((c) => c.tripId == t.id);
+    trips.removeWhere((x) => x.id == t.id);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> setTargetLang(String? code) async {
+    targetLang = code;
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> setScript(String key) async {
+    scriptKey = key;
+    await _save();
+    notifyListeners();
+  }
+
+  List<Capture> capturesOf(Trip t) {
+    final list = captures.where((c) => c.tripId == t.id).toList()
+      ..sort((a, b) => b.at.compareTo(a.at));
+    return list;
+  }
+}
