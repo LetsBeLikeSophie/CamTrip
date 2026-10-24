@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'demo.dart';
 import 'models.dart';
 import 'photo.dart';
+import 'usage_log.dart';
 
 /// Everything is stored on the device only, in one JSON file plus the
 /// copied photos. Nothing here is sent anywhere. The web preview keeps
@@ -23,11 +24,16 @@ class AppStore extends ChangeNotifier {
   /// True when the saved data could not be read at start-up.
   bool loadFailed = false;
 
+  /// Whether the user agreed to keep usage events. null = not asked yet.
+  bool? logConsent;
+  UsageLog usage = UsageLog(null);
+
   File get _file => File('${_dir.path}/camtrip.json');
   Directory get photoDir => Directory('${_dir.path}/photos');
 
   Future<void> load() async {
     if (kIsWeb) {
+      logConsent = false;
       _loadDemo();
       notifyListeners();
       return;
@@ -36,6 +42,8 @@ class AppStore extends ChangeNotifier {
     if (!await photoDir.exists()) {
       await photoDir.create(recursive: true);
     }
+    usage = UsageLog(File('${_dir.path}/usage_log.jsonl'));
+    await usage.load();
     if (await _file.exists()) {
       try {
         final data = jsonDecode(await _file.readAsString()) as Map<String, dynamic>;
@@ -49,6 +57,7 @@ class AppStore extends ChangeNotifier {
               .map((e) => Capture.fromJson(e as Map<String, dynamic>)));
         scriptKey = (data['scriptKey'] as String?) ?? 'japanese';
         targetLang = data['targetLang'] as String?;
+        logConsent = data['logConsent'] as bool?;
       } catch (e) {
         // Keep the broken file so the next save does not wipe the old data.
         debugPrint('CamTrip: could not read saved data: $e');
@@ -90,6 +99,19 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  /// Records a usage event only when the user agreed. Pass action names
+  /// and counts, never what the user photographed or wrote.
+  void track(String event, [Map<String, Object?> props = const {}]) {
+    if (logConsent == true) usage.add(event, props);
+  }
+
+  Future<void> setLogConsent(bool agreed) async {
+    logConsent = agreed;
+    if (!agreed) await usage.clear();
+    await _save();
+    notifyListeners();
+  }
+
   Future<void> _save() async {
     if (kIsWeb) return;
     final data = {
@@ -97,6 +119,7 @@ class AppStore extends ChangeNotifier {
       'captures': captures.map((c) => c.toJson()).toList(),
       'scriptKey': scriptKey,
       'targetLang': targetLang,
+      'logConsent': logConsent,
     };
     // Write to a temp file first so a crash mid-write cannot corrupt the data.
     final tmp = File('${_file.path}.tmp');
@@ -125,6 +148,7 @@ class AppStore extends ChangeNotifier {
   Future<void> addLang(Trip t, String lang) async {
     if (t.langs.contains(lang)) return;
     t.langs.add(lang);
+    track('trip_lang_added', {'lang': lang});
     await _save();
     notifyListeners();
   }
@@ -144,6 +168,7 @@ class AppStore extends ChangeNotifier {
       lastAt: now,
     );
     trips.add(trip);
+    track('trip_created', {'lang': lang});
     await _save();
     notifyListeners();
     return trip;
@@ -172,6 +197,7 @@ class AppStore extends ChangeNotifier {
     );
     captures.add(capture);
     trip.lastAt = now;
+    track('capture_saved', {'lang': sourceLang, 'blocks': blocks.length, 'category': capture.category});
     await _save();
     notifyListeners();
     return capture;
@@ -185,6 +211,7 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> setCategory(Capture c, String category) async {
+    track('category_changed', {'from': c.category, 'to': category});
     c.category = category;
     await _save();
     notifyListeners();
@@ -193,6 +220,7 @@ class AppStore extends ChangeNotifier {
   Future<void> deleteCapture(Capture c) async {
     captures.removeWhere((x) => x.id == c.id);
     await deletePhoto(c.imagePath);
+    track('capture_deleted');
     // A trip with no translations left is removed with its last capture.
     trips.removeWhere((t) => !captures.any((x) => x.tripId == t.id));
     await _save();
@@ -213,12 +241,14 @@ class AppStore extends ChangeNotifier {
     }
     captures.removeWhere((c) => c.tripId == t.id);
     trips.removeWhere((x) => x.id == t.id);
+    track('trip_deleted', {'captures': gone.length});
     await _save();
     notifyListeners();
   }
 
   Future<void> setTargetLang(String? code) async {
     targetLang = code;
+    track('target_lang_changed', {'to': code ?? 'phone'});
     await _save();
     notifyListeners();
   }

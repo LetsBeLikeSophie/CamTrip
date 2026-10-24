@@ -30,6 +30,9 @@ class _CameraHomeState extends State<CameraHome> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _toast(
           '저장된 기록을 읽지 못했어요. 원래 파일은 따로 보관해 뒀어요.'));
     }
+    if (widget.store.logConsent == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _askLogConsent());
+    }
   }
 
   String get _targetLang {
@@ -58,6 +61,7 @@ class _CameraHomeState extends State<CameraHome> {
   }
 
   Future<void> _start(ImageSource source) async {
+    widget.store.track('capture_started', {'source': source.name});
     try {
       final String imagePath;
       final TranslationOutput out;
@@ -89,6 +93,7 @@ class _CameraHomeState extends State<CameraHome> {
         setState(() => _step = null);
         final answer = await _askNewTrip(out.sourceLang);
         if (!mounted) return;
+        widget.store.track('new_trip_answer', {'answer': answer == null ? 'continue' : 'new'});
         if (answer != null) {
           trip = await widget.store.createTrip(
             country: answer.$1,
@@ -120,17 +125,52 @@ class _CameraHomeState extends State<CameraHome> {
         builder: (_) => ResultScreen(store: widget.store, capture: capture),
       ));
     } on NoTextFound {
+      widget.store.track('translate_failed', {'reason': 'no_text'});
       _toast('글자를 찾지 못했어요. 글자가 크게 보이게 다시 찍어주세요.');
     } on ModelDownloadFailed {
+      widget.store.track('translate_failed', {'reason': 'model_download'});
       _toast('번역 언어팩을 내려받지 못했어요. 인터넷 연결을 확인해주세요.');
     } on UnsupportedLanguage catch (e) {
+      widget.store.track('translate_failed', {'reason': 'unsupported', 'lang': e.code});
       _toast('아직 번역할 수 없는 언어예요 (${e.code}).');
     } catch (e) {
+      widget.store.track('translate_failed', {'reason': 'other'});
       _toast('번역하지 못했어요. 다시 시도해주세요.');
       debugPrint('CamTrip error: $e');
     } finally {
       if (mounted) setState(() => _step = null);
     }
+  }
+
+  Future<void> _askLogConsent() async {
+    if (!mounted) return;
+    final agreed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        title: const Text('앱 개선을 도와주실래요?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+        content: const Text(
+          '어떤 버튼을 눌렀는지, 번역이 됐는지 같은 사용 기록만 남겨요. '
+          '사진·메모·번역 내용은 남기지 않아요.\n\n'
+          '지금은 이 폰 안에만 저장되고, 설정에서 언제든 끄거나 지울 수 있어요.',
+          style: TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('남기지 않기', style: TextStyle(color: muted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('남기기', style: TextStyle(color: ink, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    await widget.store.setLogConsent(agreed ?? false);
   }
 
   void _toast(String msg) {

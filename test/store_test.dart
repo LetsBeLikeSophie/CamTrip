@@ -35,6 +35,20 @@ void main() {
     expect(store.needsNewTrip('ja', now), isFalse);
   });
 
+  test('usage events are kept only after consent', () async {
+    final store = AppStore();
+    store.track('capture_started');
+    expect(store.usage.lines, isEmpty);
+    store.logConsent = false;
+    store.track('capture_started');
+    expect(store.usage.lines, isEmpty);
+    store.logConsent = true;
+    store.track('capture_started', {'source': 'camera'});
+    await Future<void>.delayed(Duration.zero);
+    expect(store.usage.lines, hasLength(1));
+    expect(store.usage.lines.first, contains('"e":"capture_started"'));
+  });
+
   test('more than 3 days away asks for a new trip', () {
     final store = AppStore()..trips.add(trip(['ja']));
     expect(store.needsNewTrip('ja', start.add(const Duration(days: 4))), isTrue);
