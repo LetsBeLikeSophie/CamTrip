@@ -168,7 +168,8 @@ AI 기능 4개:
 {
   "device_id": "…",
   "entitlements": [
-    { "type": "trip_pass", "trip_key": "t-2026-11-tokyo", "until": null },
+    { "type": "trip_pass", "state": "unused", "bought_at": "2026-11-01T09:00:00Z" },
+    { "type": "trip_pass", "state": "active", "trip_key": "t-2026-11-tokyo", "from": "2026-11-03", "until": "2026-11-17" },
     { "type": "yearly", "until": "2027-11-01T00:00:00Z" }
   ],
   "credits": 29,
@@ -180,12 +181,22 @@ AI 기능 4개:
 ### POST /purchase/verify — 구매 확인
 
 ```json
-{ "product_id": "trip_pass", "purchase_token": "…", "trip_key": "t-2026-11-tokyo" }
+{ "product_id": "trip_pass", "purchase_token": "…" }
 ```
 
 ```json
 { "ok": true, "credits": 30, "entitlements": [ … ] }
 ```
+
+### POST /pass/activate — 사둔 여행 패스 쓰기 시작
+
+```json
+{ "trip_key": "t-2026-11-tokyo", "start_date": "2026-11-03" }
+```
+
+- 새 여행이 시작될 때(새 여행 창 "좋아요") 앱이 자동으로 보내요. 새 여행 창의 "나중에 쓰기"를 누르면 안 보내고, 설정의 "지금 시작하기"로 직접 보낼 수도 있어요.
+- 인터넷이 없으면 폰에 시작 날짜를 적어두고 연결되면 보내요. 서버는 `산 날 ≤ start_date ≤ 오늘`일 때만 받아요 (날짜 조작 방지).
+- 기간은 `start_date`부터 14일. 안 쓴 패스는 사라지지 않아요 (보관 기한은 정해야 함, 예: 1년).
 
 ### POST /restore — 기기 바꿈·재설치 후 복원
 
@@ -228,7 +239,7 @@ AI 기능 4개:
 
 | product_id | 종류 | 가격(가설) | 주는 것 |
 |---|---|---|---|
-| `trip_pass` | 소모성 일회 구매 | ₩4,900 | 구매 후 14일: AI 기능 + AI로 읽기 30크레딧 |
+| `trip_pass` | 소모성 일회 구매 | ₩4,900 | 미리 사두고, 여행이 시작되는 날부터 14일: AI 기능 + AI로 읽기 30크레딧 |
 | `yearly` | 일회 구매 (1년 기간, 자동 갱신 없음) | ₩24,000 | 구매 후 1년간 AI 기능 + 매달 30크레딧 |
 | `credits_20` | 소모성 | ₩1,900 | 크레딧 20 |
 
@@ -237,7 +248,7 @@ AI 기능 4개:
 1. 앱이 Play Billing(`in_app_purchase` 패키지)으로 구매 → 구매 토큰 받음.
 2. 앱 → `POST /purchase/verify`.
 3. 서버 → Google Play Developer API로 확인. 세 상품 모두 일회 구매라 `purchases.products.get`만 쓴다 (구독 없음). 상태가 "구매됨"이고 `product_id`가 맞는지, 이 토큰을 처음 보는지 확인.
-4. 권한·크레딧 기록 → `trip_pass`·`credits_20`은 서버가 consume, `yearly`는 acknowledge (3일 안에 안 하면 자동 환불됨). 기간은 서버가 구매 시각부터 계산 (`trip_pass` 14일, `yearly` 365일).
+4. 권한·크레딧 기록 → `trip_pass`·`credits_20`은 서버가 consume, `yearly`는 acknowledge (3일 안에 안 하면 자동 환불됨). `yearly`는 구매 시각부터 365일. `trip_pass`는 사면 "안 쓴 패스"로 쌓이고, `/pass/activate`로 시작한 날부터 14일.
 5. 환불·취소: Play의 RTDN(실시간 개발자 알림, Pub/Sub) 또는 하루 1번 `voidedpurchases.list`로 확인 → 남은 크레딧·권한 회수.
 
 준비물: Google Cloud 서비스 계정 + Play Console에서 권한 연결. 서비스 계정 키 파일은 서버에만, 저장소에 넣지 않음.
@@ -354,7 +365,7 @@ H_in/H_out = Haiku 입력/출력 토큰당 단가 (확인 필요)
 ## 10. 정해야 할 것
 
 1. ~~`yearly` 구독 여부, 크레딧 이월~~ → 결정: 1년 일회 구매, 매달 30크레딧 이월 없음 (2026-10-25).
-2. ~~여행 패스 범위~~ → 결정: 구매 후 14일 (2026-10-25).
+2. ~~여행 패스 범위~~ → 결정: 미리 사두고, 여행이 시작되는 날부터 14일. 새 여행 시작 때 자동으로 쓰고, "나중에 쓰기"·"지금 시작하기"로 직접 정할 수도 있음 (2026-10-25). 남은 것: 안 쓴 패스 보관 기한.
 3. ~~첫 여행 무료 범위~~ → 결정: 첫 여행의 처음 3일까지 하루 페이지 무료 (2026-10-25).
 4. 하루 페이지 다시 만들기 횟수 제한(비용).
 5. 하루 페이지에 원문(현지어)을 같이 보낼지 — 정확도↑, 보내는 양↑.
