@@ -9,6 +9,7 @@ import 'models.dart';
 import 'money.dart';
 import 'palette.dart';
 import 'photo.dart';
+import 'reminder.dart';
 import 'usage_log.dart';
 
 /// Everything is stored on the device only, in one JSON file plus the
@@ -34,6 +35,11 @@ class AppStore extends ChangeNotifier {
 
   /// The first-run screen has been seen.
   bool onboarded = false;
+
+  /// Evening wrap-up reminder.
+  bool reminderOn = true;
+  int reminderHour = 21;
+  int reminderMinute = 0;
   UsageLog usage = UsageLog(null);
 
   File get _file => File('${_dir.path}/camtrip.json');
@@ -71,6 +77,9 @@ class AppStore extends ChangeNotifier {
         logConsent = data['logConsent'] as bool?;
         // People who answered the old consent dialog have seen the start.
         onboarded = (data['onboarded'] as bool?) ?? logConsent != null;
+        reminderOn = (data['reminderOn'] as bool?) ?? true;
+        reminderHour = (data['reminderHour'] as int?) ?? 21;
+        reminderMinute = (data['reminderMinute'] as int?) ?? 0;
       } catch (e) {
         // Keep the broken file so the next save does not wipe the old data.
         debugPrint('CamTrip: could not read saved data: $e');
@@ -136,6 +145,24 @@ class AppStore extends ChangeNotifier {
   Future<void> finishOnboarding({required bool logs}) async {
     onboarded = true;
     await setLogConsent(logs);
+    await applyReminder(ask: true);
+  }
+
+  /// Schedules or cancels the evening reminder to match the settings.
+  /// With [ask], asks for the notification permission first.
+  Future<void> applyReminder({bool ask = false}) async {
+    if (kIsWeb) return;
+    if (!reminderOn) {
+      await Reminder.cancel();
+      return;
+    }
+    if (ask && !await Reminder.askPermission()) {
+      reminderOn = false;
+      await _save();
+      notifyListeners();
+      return;
+    }
+    await Reminder.schedule(reminderHour, reminderMinute);
   }
 
   Future<void> _save() async {
@@ -148,6 +175,9 @@ class AppStore extends ChangeNotifier {
       'targetLang': targetLang,
       'logConsent': logConsent,
       'onboarded': onboarded,
+      'reminderOn': reminderOn,
+      'reminderHour': reminderHour,
+      'reminderMinute': reminderMinute,
     };
     // Write to a temp file first so a crash mid-write cannot corrupt the data.
     final tmp = File('${_file.path}.tmp');
@@ -352,6 +382,39 @@ class AppStore extends ChangeNotifier {
     await _save();
     notifyListeners();
     return memo;
+  }
+
+  Future<void> updateMemo(Memo m, {required String text, required double? amount, required String category}) async {
+    track('memo_edited', {'amount_changed': amount != m.amount});
+    m.text = text.trim();
+    m.amount = amount;
+    if (amount != null) m.currency ??= currencyFor(trips.where((t) => t.id == m.tripId).firstOrNull?.lang ?? 'ja');
+    m.category = category;
+    m.sorted = true;
+    await _save();
+    notifyListeners();
+  }
+
+  /// "맞아요" in the evening wrap-up.
+  Future<void> confirmMemo(Memo m) async {
+    track('memo_confirmed', {'expense': m.amount != null});
+    m.sorted = true;
+    await _save();
+    notifyListeners();
+  }
+
+  /// Memos of the trip still waiting for the evening wrap-up, oldest first.
+  List<Memo> unsortedMemosOf(Trip t) =>
+      memos.where((m) => m.tripId == t.id && !m.sorted).toList()..sort((a, b) => a.at.compareTo(b.at));
+
+  Future<void> setReminder({bool? on, int? hour, int? minute}) async {
+    reminderOn = on ?? reminderOn;
+    reminderHour = hour ?? reminderHour;
+    reminderMinute = minute ?? reminderMinute;
+    track('reminder_changed', {'on': reminderOn});
+    await _save();
+    notifyListeners();
+    await applyReminder(ask: on == true);
   }
 
   Future<void> deleteMemo(Memo m) async {

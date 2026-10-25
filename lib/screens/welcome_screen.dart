@@ -43,10 +43,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TopBar(
+            const TopBar(
               leading: Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: Text('CamTrip', style: serif(20, weight: FontWeight.w600)),
+                padding: EdgeInsets.only(left: 12),
+                child: LogoBand(),
               ),
             ),
             ContextBand(label: '처음 오셨어요 · 1분이면 돼요', color: light1),

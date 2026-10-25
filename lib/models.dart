@@ -136,6 +136,12 @@ class Memo {
   double? amount;
   String? currency;
 
+  /// Expense category when the memo has an amount, one of [expenseCategories].
+  String category;
+
+  /// Confirmed in the evening wrap-up.
+  bool sorted;
+
   Memo({
     required this.id,
     required this.tripId,
@@ -143,7 +149,9 @@ class Memo {
     required this.text,
     this.amount,
     this.currency,
-  });
+    String? category,
+    this.sorted = false,
+  }) : category = category ?? guessMemoCategory(text);
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -152,6 +160,8 @@ class Memo {
         'text': text,
         'amount': amount,
         'currency': currency,
+        'category': category,
+        'sorted': sorted,
       };
 
   factory Memo.fromJson(Map<String, dynamic> j) => Memo(
@@ -161,7 +171,19 @@ class Memo {
         text: j['text'] as String,
         amount: (j['amount'] as num?)?.toDouble(),
         currency: j['currency'] as String?,
+        category: j['category'] as String?,
+        sorted: (j['sorted'] as bool?) ?? false,
       );
+}
+
+/// Expense category guess for a spoken memo.
+String guessMemoCategory(String text) {
+  bool any(List<String> words) => words.any(text.contains);
+  if (any(['택시', '지하철', '전철', '버스', '기차', '신칸센', '교통', '공항철도', '스이카', '페리'])) return '교통';
+  if (any(['호텔', '숙소', '게스트하우스', '료칸', '에어비앤비'])) return '숙소';
+  if (any(['샀', '쇼핑', '기념품', '선물', '옷', '화장품', '드럭스토어'])) return '쇼핑';
+  if (any(['먹', '마셨', '라멘', '커피', '카페', '식당', '맥주', '모찌', '밥', '간식', '편의점'])) return '식비';
+  return '기타';
 }
 
 /// Four colors taken from a trip's cover photo: two light, two dark.

@@ -53,6 +53,38 @@ class SettingsScreen extends StatelessWidget {
                 for (final e in targetOptions.entries)
                   _choice(e.value, store.targetLang == e.key, () => store.setTargetLang(e.key)),
                 if (!kIsWeb) ...[
+                  _section('저녁 정리', light1),
+                  BandRow(
+                    child: Row(
+                      children: [
+                        Expanded(child: Text('정리 알림', style: body(15))),
+                        Checkbox(
+                          value: store.reminderOn,
+                          activeColor: C.navy,
+                          shape: const RoundedRectangleBorder(),
+                          onChanged: (v) => store.setReminder(on: v ?? false),
+                        ),
+                      ],
+                    ),
+                  ),
+                  BandRow(
+                    onTap: () async {
+                      final t = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay(hour: store.reminderHour, minute: store.reminderMinute),
+                      );
+                      if (t != null) await store.setReminder(hour: t.hour, minute: t.minute);
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(child: Text('알림 시간', style: body(15))),
+                        Text(
+                          '${store.reminderHour.toString().padLeft(2, '0')}:${store.reminderMinute.toString().padLeft(2, '0')}',
+                          style: mono(14, color: C.navy),
+                        ),
+                      ],
+                    ),
+                  ),
                   _section('개인정보', light1),
                   BandRow(
                     minHeight: 72,

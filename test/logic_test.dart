@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:camtrip/models.dart';
@@ -95,10 +96,36 @@ void main() {
       expect(r.darkRight, isFalse);
     });
 
-    test('a loud color is calmed down', () {
-      final r = readCover(image(10, 10, const Color(0xFFFF00FF), const Color(0xFFFF00FF)), 10, 10);
-      expect(HSLColor.fromColor(Color(r.palette.light1)).saturation, lessThanOrEqualTo(0.36));
+    test('a loud color is calmed down to the logo color ranges', () {
+      final r = readCover(image(10, 10, const Color(0xFFFF00FF), const Color(0xFF00FF00)), 10, 10);
+      final l1 = Oklch.of(Color(r.palette.light1)), d1 = Oklch.of(Color(r.palette.dark1));
+      expect(l1.l, inInclusiveRange(0.875, 0.935));
+      expect(l1.c, lessThanOrEqualTo(0.055));
+      expect(d1.l, inInclusiveRange(0.235, 0.355));
+      expect(d1.c, lessThanOrEqualTo(0.085));
     });
+
+    test('text on the bands stays readable', () {
+      double contrast(Color a, Color b) {
+        final x = a.computeLuminance(), y = b.computeLuminance();
+        return (math.max(x, y) + 0.05) / (math.min(x, y) + 0.05);
+      }
+      for (final c in [const Color(0xFFC27A3E), const Color(0xFF2A2F6B), const Color(0xFF4E7A62)]) {
+        final r = readCover(image(10, 10, c, c), 10, 10);
+        expect(contrast(Color(r.palette.light1), const Color(0xFF16213A)), greaterThanOrEqualTo(4.5));
+        expect(contrast(Color(r.palette.dark1), const Color(0xFFF4F1EA)), greaterThanOrEqualTo(4.5));
+      }
+    });
+  });
+
+  test('memo categories', () {
+    expect(guessMemoCategory('택시 2,800엔, 현금'), '교통');
+    expect(guessMemoCategory('시장에서 딸기 모찌 두 개 600엔'), '식비');
+    expect(guessMemoCategory('기념품 샀어 3000엔'), '쇼핑');
+    expect(guessMemoCategory('노을 진짜 예뻤다'), '기타');
+    final m = Memo.fromJson({'id': 'm', 'tripId': 't', 'at': DateTime(2026).toIso8601String(), 'text': '호텔 1박'});
+    expect(m.category, '숙소');
+    expect(m.sorted, isFalse);
   });
 
   test('old saved captures still load', () {

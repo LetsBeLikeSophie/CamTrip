@@ -15,7 +15,10 @@ abstract final class C {
 }
 
 /// Titles, big numbers and item names.
-TextStyle serif(double size, {FontWeight weight = FontWeight.w500, Color? color, double height = 1.25}) =>
+TextStyle serif(double size,
+        {FontWeight weight = FontWeight.w500,
+        Color? color,
+        double height = 1.25}) =>
     GoogleFonts.notoSerifKr(
       fontSize: size,
       fontWeight: weight,
@@ -28,8 +31,15 @@ TextStyle serif(double size, {FontWeight weight = FontWeight.w500, Color? color,
 TextStyle mono(double size, {Color? color}) =>
     GoogleFonts.ibmPlexMono(fontSize: size, color: color ?? C.sub);
 
-TextStyle body(double size, {FontWeight weight = FontWeight.w400, Color? color, double height = 1.45}) =>
-    GoogleFonts.ibmPlexSansKr(fontSize: size, fontWeight: weight, color: color ?? C.navy, height: height);
+TextStyle body(double size,
+        {FontWeight weight = FontWeight.w400,
+        Color? color,
+        double height = 1.45}) =>
+    GoogleFonts.ibmPlexSansKr(
+        fontSize: size,
+        fontWeight: weight,
+        color: color ?? C.navy,
+        height: height);
 
 Color textOn(Color background) => isDark(background) ? C.ivory : C.navy;
 
@@ -81,7 +91,12 @@ class ContextBand extends StatelessWidget {
   final Widget? trailing;
   final Color color;
   final VoidCallback? onTap;
-  const ContextBand({super.key, required this.label, required this.color, this.trailing, this.onTap});
+  const ContextBand(
+      {super.key,
+      required this.label,
+      required this.color,
+      this.trailing,
+      this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -96,8 +111,12 @@ class ContextBand extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
-                Expanded(child: Text(label, style: body(13, weight: FontWeight.w500, color: fg))),
-                if (trailing != null) DefaultTextStyle.merge(style: TextStyle(color: fg), child: trailing!),
+                Expanded(
+                    child: Text(label,
+                        style: body(13, weight: FontWeight.w500, color: fg))),
+                if (trailing != null)
+                  DefaultTextStyle.merge(
+                      style: TextStyle(color: fg), child: trailing!),
               ],
             ),
           ),
@@ -137,11 +156,19 @@ class ActionBand extends StatelessWidget {
           height: 72 + bottom,
           padding: EdgeInsets.fromLTRB(24, 0, 24, bottom),
           child: Row(
-            mainAxisAlignment: centered ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: centered
+                ? MainAxisAlignment.center
+                : MainAxisAlignment.spaceBetween,
             children: [
-              if (icon != null) ...[Icon(icon, color: fg, size: 22), const SizedBox(width: 10)],
+              if (icon != null) ...[
+                Icon(icon, color: fg, size: 22),
+                const SizedBox(width: 10)
+              ],
               Text(label, style: body(15, weight: FontWeight.w500, color: fg)),
-              if (arrow && !centered) ...[const Spacer(), Icon(Icons.arrow_forward, color: fg, size: 20)],
+              if (arrow && !centered) ...[
+                const Spacer(),
+                Icon(Icons.arrow_forward, color: fg, size: 20)
+              ],
             ],
           ),
         ),
@@ -175,7 +202,8 @@ class BandRow extends StatelessWidget {
         child: Container(
           constraints: BoxConstraints(minHeight: minHeight),
           padding: padding,
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: C.line))),
+          decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: C.line))),
           alignment: Alignment.centerLeft,
           child: child,
         ),
@@ -190,7 +218,12 @@ class LinkBand extends StatelessWidget {
   final String? sub;
   final Color color;
   final VoidCallback onTap;
-  const LinkBand({super.key, required this.label, required this.color, required this.onTap, this.sub});
+  const LinkBand(
+      {super.key,
+      required this.label,
+      required this.color,
+      required this.onTap,
+      this.sub});
 
   @override
   Widget build(BuildContext context) {
@@ -206,7 +239,9 @@ class LinkBand extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(label, style: body(14, color: fg)),
-                if (sub != null) Text(sub!, style: body(12, color: fg.withValues(alpha: 0.75))),
+                if (sub != null)
+                  Text(sub!,
+                      style: body(12, color: fg.withValues(alpha: 0.75))),
               ],
             ),
           ),
@@ -241,7 +276,8 @@ class ListenCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 64,
-      decoration: const BoxDecoration(border: Border(left: BorderSide(color: C.line))),
+      decoration:
+          const BoxDecoration(border: Border(left: BorderSide(color: C.line))),
       child: IconButton(
         tooltip: tooltip,
         onPressed: onTap,
@@ -260,5 +296,65 @@ void toast(BuildContext context, String msg) {
   ));
 }
 
-String hm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+String hm(DateTime t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 String md(DateTime t) => '${t.month}.${t.day}';
+
+/// The CamTrip wordmark: four bands in the trip's colors with "Cam" on the
+/// light half and "Trip" on the dark half. It changes with every trip.
+class LogoBand extends StatelessWidget {
+  final TripPalette palette;
+  final double height;
+  const LogoBand(
+      {super.key, this.palette = TripPalette.fallback, this.height = 30});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = height * 0.52;
+    return Semantics(
+      label: 'CamTrip',
+      child: SizedBox(
+        width: height * 4.6,
+        height: height,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final c in [
+                    palette.light1,
+                    palette.light2,
+                    palette.dark1,
+                    palette.dark2
+                  ])
+                    Expanded(child: ColoredBox(color: Color(c))),
+                ],
+              ),
+            ),
+            Positioned.fill(
+              child: Row(
+                children: [
+                  Expanded(
+                      child: Center(
+                          child: Text('Cam',
+                              style: serif(size,
+                                  weight: FontWeight.w600, height: 1)))),
+                  Expanded(
+                    child: Center(
+                      child: Text('Trip',
+                          style: serif(size,
+                              weight: FontWeight.w600,
+                              color: C.ivory,
+                              height: 1)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

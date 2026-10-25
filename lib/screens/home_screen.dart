@@ -10,7 +10,10 @@ import '../store.dart';
 import '../translator_service.dart';
 import '../ui.dart';
 import '../voice.dart';
+import 'memo_sheet.dart';
+import 'no_text_screen.dart';
 import 'receipt_screen.dart';
+import 'sort_screen.dart';
 import 'translate_screen.dart';
 import 'trips_screen.dart';
 
@@ -79,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _start(ImageSource source) async {
     store.track('capture_started', {'source': source.name});
+    var picked = '';
     try {
       final String imagePath;
       final TranslationOutput out;
@@ -88,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final file = await _picker.pickImage(source: source, imageQuality: 90, maxWidth: 2400);
         if (file == null || !mounted) return;
         imagePath = file.path;
+        picked = file.path;
         setState(() => _step = '글자 읽는 중');
         final tripLang = store.currentTrip?.lang;
         out = await _service.run(
@@ -135,7 +140,16 @@ class _HomeScreenState extends State<HomeScreen> {
       if (result == 'retake' && mounted) _start(source);
     } on NoTextFound {
       store.track('translate_failed', {'reason': 'no_text'});
-      if (mounted) toast(context, '글자를 찾지 못했어요. 글자가 크게 보이게 다시 찍어주세요.');
+      if (mounted) {
+        setState(() => _step = null);
+        final again = await Navigator.of(context).push<String>(MaterialPageRoute(
+          builder: (_) => NoTextScreen(
+            imagePath: picked,
+            palette: store.currentTrip?.palette ?? TripPalette.fallback,
+          ),
+        ));
+        if (again == 'retake' && mounted) _start(source);
+      }
     } on ModelDownloadFailed {
       store.track('translate_failed', {'reason': 'model_download'});
       if (mounted) toast(context, '번역 언어팩을 내려받지 못했어요. 인터넷 연결을 확인해주세요.');
@@ -224,36 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ));
   }
 
-  Future<void> _openMemo(Memo m) async {
-    final delete = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: C.ivory,
-        surfaceTintColor: C.ivory,
-        shape: const RoundedRectangleBorder(),
-        title: Text('${md(m.at)} ${hm(m.at)} 메모', style: serif(18)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(m.text, style: body(16)),
-            if (m.amount != null) ...[
-              const SizedBox(height: 10),
-              Text('경비로 셈: ${formatMoney(m.amount!, m.currency)}', style: body(13, color: C.sub)),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('지우기', style: body(14, color: C.sub))),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('닫기', style: body(14, weight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-    if (delete == true) await store.deleteMemo(m);
-  }
+  Future<void> _openMemo(Memo m) => showMemoSheet(context, store, m);
 
   Future<void> _pickCover(Trip trip) async {
     final photos = store.capturesOf(trip);
@@ -311,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     TopBar(
                       leading: Padding(
                         padding: const EdgeInsets.only(left: 12),
-                        child: Text('CamTrip', style: serif(20, weight: FontWeight.w600)),
+                        child: LogoBand(palette: trip?.palette ?? TripPalette.fallback),
                       ),
                       actions: [
                         TextButton(
@@ -498,6 +483,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+        if (store.unsortedMemosOf(trip).isNotEmpty)
+          LinkBand(
+            label: '정리할 메모 ${store.unsortedMemosOf(trip).length}개 · 저녁 정리',
+            color: trip.light2,
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SortScreen(store: store))),
+          ),
         for (final d in days.keys) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
