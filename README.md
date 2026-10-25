@@ -9,6 +9,12 @@ https://itssophie.dev/camtrip/ — 브라우저에서는 카메라·ML Kit를 �
 샘플 사진(`assets/demo`, `lib/demo.dart`)으로 화면과 흐름만 보여줘요. 웹 기록은 저장되지 않아요.
 빌드: `flutter build web --release --base-href /camtrip/` (Git Bash에서는 앞에 `MSYS_NO_PATHCONV=1`).
 
+## 테스트 APK
+
+https://itssophie.dev/camtrip/download.html (안내 페이지 `web/download.html`) → `camtrip.apk`. arm64 전용, 디버그 키 서명.
+새 APK를 올리면 `pubspec.yaml` 버전과 `web/download.html`의 버전·크기·SHA-256도 같이 고쳐요.
+웹을 다시 올릴 때 서버 폴더를 통째로 지우면 APK도 지워지니 주의.
+
 ## 되는 것 (0.2, 폰 안에서만)
 
 - 처음 켰을 때 안내 + 사용 기록 동의(선택)
